@@ -172,52 +172,54 @@ public class MainActivity extends AppCompatActivity {
         if (resultCode == RESULT_OK) {
             // Вернулись от приложения Камера
             if (requestCode == CAMERA_CAPTURE) {
-                /*
                 // Получим Uri снимка
-                picUri = data.getData();
-
                 if (picUri == null) {
-                    try {
-                        picUri = (Uri) data.getExtras().get("data");
-                        performCrop();
-                    } catch (Exception e) {
-                        Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
-                        ico.setImageBitmap(thumbnailBitmap);
-                    }
-                } else {
-                    // кадрируем его
-                    try {
-                        performCrop();
-                    } catch (ActivityNotFoundException anfe) {
-                        Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
-                        ico.setImageBitmap(thumbnailBitmap);
+                    picUri = data.getData();
+
+                    if (picUri == null) {
+                        try {
+                            picUri = (Uri) data.getExtras().get("data");
+                        } catch (Exception e) {
+                            Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
+                            ico.setImageBitmap(thumbnailBitmap);
+                        }
                     }
                 }
-                */
                 if (picUri != null) {
                     try {
                         performCrop();
                     } catch (ActivityNotFoundException anfe) {
-                        ico.setImageBitmap(getDecodeBitmap(picUri));
+                        Bitmap bitmap = getDecodeBitmap(picUri);
+                        if (bitmap != null) {
+                            ico.setImageBitmap(bitmap);
+                        } else {
+                            ico.setImageResource(R.drawable.user);
+                        }
                     }
                 }
                 // Вернулись из операции кадрирования
             } else if(requestCode == PIC_CROP){
                 Bundle extras = data.getExtras();
-                Bitmap thePic;
+                Bitmap bitmap;
                 if(extras == null) {
-                    thePic = getDecodeBitmap(data.getData());
+                    bitmap = getDecodeBitmap(data.getData());
                 }else {
                     try {
                         // Получим кадрированное изображение
-                        thePic = extras.getParcelable("data");
+                        bitmap = extras.getParcelable("data");
                     } catch(Exception anfe){
-                        thePic = (Bitmap) extras.get("data");
+                        bitmap = (Bitmap) extras.get("data");
                     }
                 }
                 // передаём его в ImageView
-                ico.setImageBitmap(thePic);
-
+                if (bitmap != null) {
+                    ico.setImageBitmap(bitmap);
+                } else {
+                    ico.setImageResource(R.drawable.user);
+                }
+                if (photoFile != null) {
+                    photoFile.delete();
+                }
             } else if (requestCode == GALLERY_REQUEST) {
                 Bitmap bitmap = null;
                 // Получим Uri снимка
@@ -229,33 +231,40 @@ public class MainActivity extends AppCompatActivity {
                         if (realPath.contains("http")) {
                             new getFile(realPath).execute();
                             return;
-                        }
-                        else {
+                        } else {
                             picUri = Uri.parse(realPath);
                             Uri inUri = picUri;
                             File in = new File(inUri.getPath());
                             try {
                                 File out = createImageFile();
                                 copy(in, out);
-                            } catch (IOException e) {
+                                // кадрируем его
+                                try {
+                                    performCrop();
+                                } catch(ActivityNotFoundException anfe){
+                                    bitmap = getDecodeBitmap(picUri);
+                                    if (bitmap != null) {
+                                        ico.setImageBitmap(bitmap);
+                                    } else {
+                                        ico.setImageResource(R.drawable.user);
+                                    }
+                                }
+                            } catch (Exception e) {
                                 e.printStackTrace();
-                            }
-
-                            // кадрируем его
-                            try {
-                                performCrop();
-                            } catch(ActivityNotFoundException anfe){
-                                ico.setImageBitmap(getDecodeBitmap(picUri));
+                                ico.setImageResource(R.drawable.user);
                             }
                         }
-                    }
-                    else {
+                    } else {
                         try {
                             bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), picUri);
                         } catch (IOException e) {
                             e.printStackTrace();
                         }
-                        ico.setImageBitmap(bitmap);
+                        if (bitmap != null) {
+                            ico.setImageBitmap(bitmap);
+                        } else {
+                            ico.setImageResource(R.drawable.user);
+                        }
                     }
                 }
             }
@@ -323,7 +332,11 @@ public class MainActivity extends AppCompatActivity {
                     performCrop();
                 } catch(ActivityNotFoundException anfe){
                     Bitmap bitmap = getDecodeBitmap(picUri);
-                    ico.setImageBitmap(bitmap);
+                    if (bitmap != null) {
+                        ico.setImageBitmap(bitmap);
+                    } else {
+                        ico.setImageResource(R.drawable.user);
+                    }
                 }
             }
         }
@@ -349,10 +362,12 @@ public class MainActivity extends AppCompatActivity {
         Cursor cursor = null;
         try {
             String[] proj = {MediaStore.Images.Media.DATA};
-            cursor = getContentResolver().query(contentUri,  proj, null, null, null);
+            cursor = getContentResolver().query(contentUri, proj, null, null, null);
             int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
             cursor.moveToFirst();
             return cursor.getString(column_index);
+        } catch (Exception e) {
+            return contentUri.getPath();
         } finally {
             if (cursor != null) {
                 cursor.close();
@@ -427,17 +442,11 @@ public class MainActivity extends AppCompatActivity {
     // create file
     private File createImageFile() throws IOException {
         // Create an image file name
-        String imageFileName = "temp";
-
         File storageDir = getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES);
         if (!storageDir.exists()) {
             storageDir.mkdirs();
-        }
-        File image = File.createTempFile(
-                imageFileName,  // prefix /
-                ".jpg",         // suffix /
-                storageDir      // directory /
-        );
+        };
+        File image = new File(storageDir.getAbsolutePath()+"/temp.jpg");
         picUri = Uri.fromFile(image);
         return image;
     }
@@ -465,6 +474,9 @@ public class MainActivity extends AppCompatActivity {
                     photoUri = Uri.fromFile(photoFile);
                 }
                 takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+                startActivityForResult(takePictureIntent, CAMERA_CAPTURE);
+            } else {
+                picUri = null;
                 startActivityForResult(takePictureIntent, CAMERA_CAPTURE);
             }
         }
