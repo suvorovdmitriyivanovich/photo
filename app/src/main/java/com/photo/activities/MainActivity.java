@@ -6,10 +6,12 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.support.v4.content.FileProvider;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
@@ -18,6 +20,7 @@ import android.widget.LinearLayout;
 import android.widget.Toast;
 import com.photo.Photo;
 import com.photo.R;
+import java.io.File;
 import java.io.IOException;
 
 public class MainActivity extends AppCompatActivity {
@@ -33,6 +36,11 @@ public class MainActivity extends AppCompatActivity {
     static final int GALLERY_REQUEST = 3;
     private Uri picUri;
     private static long back_pressed;
+    private File photoFile;
+    private static final String[] PERMISSIONS = {
+            Manifest.permission.CAMERA,
+            Manifest.permission.WRITE_EXTERNAL_STORAGE
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -41,7 +49,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         AlertDialog.Builder adb = new AlertDialog.Builder(this);
-        //adb.setTitle(getResources().getString(R.string.text_change_photo));
         adb.setCancelable(true);
         LinearLayout view = (LinearLayout) getLayoutInflater()
                 .inflate(R.layout.dialog_photo, null);
@@ -72,14 +79,18 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-                        checkSelfPermission(Manifest.permission.CAMERA)
-                                != PackageManager.PERMISSION_GRANTED) {
-                    requestPermissions(new String[]{Manifest.permission.CAMERA}, 100);
+                        (checkSelfPermission(Manifest.permission.CAMERA)
+                                != PackageManager.PERMISSION_GRANTED ||
+                                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                        != PackageManager.PERMISSION_GRANTED)) {
+                    //requestPermissions(new String[]{Manifest.permission.CAMERA}, 100);
+                    requestPermissions(PERMISSIONS, 100);
                 } else {
                     try {
                         // Намерение для запуска камеры
-                        Intent captureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                        startActivityForResult(captureIntent, CAMERA_CAPTURE);
+                        //Intent captureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                        //startActivityForResult(captureIntent, CAMERA_CAPTURE);
+                        startCameraIntent();
                     } catch (Exception e) {
                         Toast toast = Toast
                                 .makeText(getApplicationContext(), getResources().getString(R.string.text_error_camera), Toast.LENGTH_LONG);
@@ -124,12 +135,14 @@ public class MainActivity extends AppCompatActivity {
                                            String permissions[], int[] grantResults) {
         if (requestCode == 100) {
             // If request is cancelled, the result arrays are empty.
-            if (grantResults.length > 0
-                    && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            if (grantResults.length > 1
+                    && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                    && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
                 try {
                     // Намерение для запуска камеры
-                    Intent captureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    startActivityForResult(captureIntent, CAMERA_CAPTURE);
+                    //Intent captureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                    //startActivityForResult(captureIntent, CAMERA_CAPTURE);
+                    startCameraIntent();
                 } catch (Exception e) {
                     Toast toast = Toast
                             .makeText(getApplicationContext(), getResources().getString(R.string.text_error_camera), Toast.LENGTH_LONG);
@@ -150,12 +163,18 @@ public class MainActivity extends AppCompatActivity {
         if (resultCode == RESULT_OK) {
             // Вернулись от приложения Камера
             if (requestCode == CAMERA_CAPTURE) {
+                /*
                 // Получим Uri снимка
                 picUri = data.getData();
 
                 if (picUri == null) {
-                    Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
-                    ico.setImageBitmap(thumbnailBitmap);
+                    try {
+                        picUri = (Uri) data.getExtras().get("data");
+                        performCrop();
+                    } catch (Exception e) {
+                        Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
+                        ico.setImageBitmap(thumbnailBitmap);
+                    }
                 } else {
                     // кадрируем его
                     try {
@@ -163,6 +182,14 @@ public class MainActivity extends AppCompatActivity {
                     } catch (ActivityNotFoundException anfe) {
                         Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
                         ico.setImageBitmap(thumbnailBitmap);
+                    }
+                }
+                */
+                if (picUri != null) {
+                    try {
+                        performCrop();
+                    } catch (ActivityNotFoundException anfe) {
+                        ico.setImageBitmap(getDecodeBitmap(picUri));
                     }
                 }
                 // Вернулись из операции кадрирования
@@ -198,6 +225,57 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private static Bitmap getDecodeBitmap(Uri uri) {
+        // read image file
+        final BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inJustDecodeBounds = true;
+        options.inPreferredConfig = Bitmap.Config.RGB_565;
+        BitmapFactory.decodeFile(uri.getPath(), options);
+
+        float width = options.outWidth;
+        float height = options.outHeight;
+
+        if(width > height) {
+            if (width > 1024) {
+                height = height / (width / 1024);
+                width = 1024;
+            }
+        } else if(height > width) {
+            if (height > 1024) {
+                width = width / (height / 1024);
+                height = 1024;
+            }
+        } else {
+            if (height > 1024) {
+                height = 1024;
+                width = 1024;
+            }
+        }
+
+        options.inSampleSize = calculateInSampleSize(options, (int)width, (int)height);
+        options.inJustDecodeBounds = false;
+        return BitmapFactory.decodeFile(uri.getPath(), options);
+    }
+
+    public static int calculateInSampleSize(BitmapFactory.Options options, int reqWidth, int reqHeight) {
+        // real image size
+        final int height = options.outHeight;
+        final int width = options.outWidth;
+        int inSampleSize = 1;
+
+        if (height > reqHeight || width > reqWidth) {
+            final int halfHeight = height / 2;
+            final int halfWidth = width / 2;
+
+            while ((halfHeight / inSampleSize) >= reqHeight
+                    && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2;
+            }
+        }
+
+        return inSampleSize;
+    }
+
     private void performCrop(){
         // Намерение для кадрирования. Не все устройства поддерживают его
         Intent cropIntent = new Intent("com.android.camera.action.CROP");
@@ -209,6 +287,52 @@ public class MainActivity extends AppCompatActivity {
         cropIntent.putExtra("outputY", 256);
         cropIntent.putExtra("return-data", true);
         startActivityForResult(cropIntent, PIC_CROP);
+    }
+
+    // create file
+    private File createImageFile() throws IOException {
+        // Create an image file name
+        String imageFileName = "temp";
+
+        File storageDir = getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES);
+        if (!storageDir.exists()) {
+            storageDir.mkdirs();
+        }
+        File image = File.createTempFile(
+                imageFileName,  // prefix /
+                ".jpg",         // suffix /
+                storageDir      // directory /
+        );
+        picUri = Uri.fromFile(image);
+        return image;
+    }
+
+    // start camera intent
+    private void startCameraIntent() {
+        Intent takePictureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+        // Ensure that there's a camera activity to handle the intent
+        if (takePictureIntent.resolveActivity(getPackageManager()) != null) {
+            // Create the File where the photo should go
+            photoFile = null;
+            try {
+                photoFile = createImageFile();
+            } catch (IOException ex) {
+                ex.printStackTrace();
+            }
+            // Continue only if the File was successfully created
+            Uri photoUri = null;
+            if (photoFile != null) {
+                if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
+                    photoUri = FileProvider.getUriForFile(MainActivity.this,
+                            getApplicationContext().getPackageName() + ".provider",
+                            photoFile);
+                } else {
+                    photoUri = Uri.fromFile(photoFile);
+                }
+                takePictureIntent.putExtra(MediaStore.EXTRA_OUTPUT, photoUri);
+                startActivityForResult(takePictureIntent, CAMERA_CAPTURE);
+            }
+        }
     }
 
     @Override
