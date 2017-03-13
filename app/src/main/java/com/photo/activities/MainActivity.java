@@ -5,9 +5,11 @@ import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
@@ -21,7 +23,14 @@ import android.widget.Toast;
 import com.photo.Photo;
 import com.photo.R;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URL;
+import java.net.URLConnection;
+import javax.net.ssl.HttpsURLConnection;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -196,11 +205,15 @@ public class MainActivity extends AppCompatActivity {
             } else if(requestCode == PIC_CROP){
                 Bundle extras = data.getExtras();
                 Bitmap thePic;
-                try {
-                    // Получим кадрированное изображение
-                    thePic = extras.getParcelable("data");
-                } catch(Exception anfe){
-                    thePic = (Bitmap) extras.get("data");
+                if(extras == null) {
+                    thePic = getDecodeBitmap(data.getData());
+                }else {
+                    try {
+                        // Получим кадрированное изображение
+                        thePic = extras.getParcelable("data");
+                    } catch(Exception anfe){
+                        thePic = (Bitmap) extras.get("data");
+                    }
                 }
                 // передаём его в ImageView
                 ico.setImageBitmap(thePic);
@@ -209,18 +222,140 @@ public class MainActivity extends AppCompatActivity {
                 Bitmap bitmap = null;
                 // Получим Uri снимка
                 picUri = data.getData();
+                if (picUri != null) {
+                    String realPath = getRealPathFromURI(picUri);
+
+                    if(realPath != null) {
+                        if (realPath.contains("http")) {
+                            new getFile(realPath).execute();
+                            return;
+                        }
+                        else {
+                            picUri = Uri.parse(realPath);
+                            Uri inUri = picUri;
+                            File in = new File(inUri.getPath());
+                            try {
+                                File out = createImageFile();
+                                copy(in, out);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+
+                            // кадрируем его
+                            try {
+                                performCrop();
+                            } catch(ActivityNotFoundException anfe){
+                                ico.setImageBitmap(getDecodeBitmap(picUri));
+                            }
+                        }
+                    }
+                    else {
+                        try {
+                            bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), picUri);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        ico.setImageBitmap(bitmap);
+                    }
+                }
+            }
+        }
+    }
+
+    // Download file from picasa
+    private class getFile extends AsyncTask<Void, Void, Integer> {
+        private String path;
+
+        getFile(String path) {
+            super();
+            this.path = path;
+        }
+
+        @Override
+        protected Integer doInBackground(Void... voids) {
+            picUri = null;
+            try {
+                File imageFile = null;
+                try {
+                    imageFile = createImageFile();
+                } catch (IOException ex) {
+                    ex.printStackTrace();
+                    return 0;
+                }
+                URL aURL = new URL(path.toString());
+
+                URLConnection conn = aURL.openConnection();
+                conn.connect();
+                InputStream is = conn.getInputStream();
+
+                this.copyInputStreamToFile(is, imageFile);
+
+                is.close();
+
+                return HttpsURLConnection.HTTP_OK;
+            } catch (Exception ex) {
+                // something went wrong
+                ex.printStackTrace();
+                return 0;
+            }
+        }
+
+        private void copyInputStreamToFile( InputStream in, File file ) {
+            try {
+                OutputStream out = new FileOutputStream(file);
+                byte[] buf = new byte[1024];
+                int len;
+                while((len=in.read(buf))>0){
+                    out.write(buf,0,len);
+                }
+                out.close();
+                in.close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Integer result) {
+            if(result == HttpsURLConnection.HTTP_OK) {
                 // кадрируем его
                 try {
                     performCrop();
                 } catch(ActivityNotFoundException anfe){
-                    try {
-                        bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), picUri);
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-
+                    Bitmap bitmap = getDecodeBitmap(picUri);
                     ico.setImageBitmap(bitmap);
                 }
+            }
+        }
+    }
+
+    // copy file
+    public void copy(File src, File dst) throws IOException {
+        InputStream in = new FileInputStream(src);
+        OutputStream out = new FileOutputStream(dst);
+
+        // Transfer bytes from in to out
+        byte[] buf = new byte[1024];
+        int len;
+        while ((len = in.read(buf)) > 0) {
+            out.write(buf, 0, len);
+        }
+        in.close();
+        out.close();
+    }
+
+    // get path from file URI
+    public String getRealPathFromURI(Uri contentUri) {
+        Cursor cursor = null;
+        try {
+            String[] proj = {MediaStore.Images.Media.DATA};
+            cursor = getContentResolver().query(contentUri,  proj, null, null, null);
+            int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+            cursor.moveToFirst();
+            return cursor.getString(column_index);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
             }
         }
     }
@@ -322,7 +457,7 @@ public class MainActivity extends AppCompatActivity {
             // Continue only if the File was successfully created
             Uri photoUri = null;
             if (photoFile != null) {
-                if(android.os.Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
+                if(Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
                     photoUri = FileProvider.getUriForFile(MainActivity.this,
                             getApplicationContext().getPackageName() + ".provider",
                             photoFile);
