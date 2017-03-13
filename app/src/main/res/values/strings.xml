@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">Photo</string>
+    <string name="photo">Photo</string>
+    <string name="text_photo">Take photo</string>
+    <string name="text_error_camera">You didn\'t grant access of App to the camera or your device does not support camera</string>
+    <string name="text_again_exit">To exit the application press «back» once again...</string>
+    <string name="text_mobile">Select from gallery</string>
+    <string name="text_delete_photo">Delete photo</string>
+    <string name="text_cancel">Cancel</string>
+</resources>
