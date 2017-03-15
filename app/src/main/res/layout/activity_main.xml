@@ -30,7 +30,7 @@
 
     <RelativeLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="500dp"
         android:background="@drawable/login_input"
         android:id="@+id/photo_group"
         android:layout_below="@+id/top_group"
@@ -38,14 +38,14 @@
         android:layout_margin="10dp">
 
         <com.photo.ui.CircleImageView
-            android:layout_width="100dp"
-            android:layout_height="100dp"
+            android:layout_width="80dp"
+            android:layout_height="80dp"
             android:id="@+id/ico"
             android:src="@drawable/user" />
 
         <RelativeLayout
-            android:layout_width="101dp"
-            android:layout_height="101dp"
+            android:layout_width="81dp"
+            android:layout_height="81dp"
             android:id="@+id/round_circle"
             android:background="@drawable/shape_list_ico_blue_big">
 
@@ -69,6 +69,23 @@
             </RelativeLayout>
 
         </RelativeLayout>
+
+        <ImageView
+            android:layout_width="80dp"
+            android:layout_height="80dp"
+            android:id="@+id/ico_box"
+            android:layout_toRightOf="@+id/ico"
+            android:layout_toEndOf="@+id/ico"
+            android:layout_marginLeft="20dp"
+            android:src="@drawable/user" />
+
+        <ImageView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:id="@+id/ico_big"
+            android:src="@drawable/user"
+            android:layout_below="@+id/ico"
+            android:layout_marginTop="20dp" />
 
     </RelativeLayout>
 

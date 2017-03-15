@@ -40,6 +40,8 @@ public class MainActivity extends AppCompatActivity {
     private View cancel_group;
     private Dialog dialog;
     private ImageView ico;
+    private ImageView ico_box;
+    private ImageView ico_big;
     private final int CAMERA_CAPTURE = 1;
     private final int PIC_CROP = 2;
     static final int GALLERY_REQUEST = 3;
@@ -50,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
             Manifest.permission.CAMERA,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
+    private boolean cropBig = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -69,7 +72,24 @@ public class MainActivity extends AppCompatActivity {
         dialog = adb.create();
 
         ico = (ImageView) findViewById(R.id.ico);
+        ico_box = (ImageView) findViewById(R.id.ico_box);
+        ico_big = (ImageView) findViewById(R.id.ico_big);
+
         ico.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.show();
+            }
+        });
+
+        ico_box.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                dialog.show();
+            }
+        });
+
+        ico_big.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
                 dialog.show();
@@ -92,13 +112,11 @@ public class MainActivity extends AppCompatActivity {
                                 != PackageManager.PERMISSION_GRANTED ||
                                 checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                                         != PackageManager.PERMISSION_GRANTED)) {
-                    //requestPermissions(new String[]{Manifest.permission.CAMERA}, 100);
                     requestPermissions(PERMISSIONS, 100);
                 } else {
+                    cropBig = false;
                     try {
                         // Намерение для запуска камеры
-                        //Intent captureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                        //startActivityForResult(captureIntent, CAMERA_CAPTURE);
                         startCameraIntent();
                     } catch (Exception e) {
                         Toast toast = Toast
@@ -114,6 +132,7 @@ public class MainActivity extends AppCompatActivity {
         mobile_group.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                cropBig = false;
                 Intent photoPickerIntent = new Intent(Intent.ACTION_PICK);
                 photoPickerIntent.setType("image/*");
                 startActivityForResult(photoPickerIntent, GALLERY_REQUEST);
@@ -126,6 +145,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 ico.setImageResource(R.drawable.user);
+                ico_box.setImageResource(R.drawable.user);
+                ico_big.setImageResource(R.drawable.user);
 
                 dialog.dismiss();
             }
@@ -149,8 +170,6 @@ public class MainActivity extends AppCompatActivity {
                     && grantResults[1] == PackageManager.PERMISSION_GRANTED) {
                 try {
                     // Намерение для запуска камеры
-                    //Intent captureIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    //startActivityForResult(captureIntent, CAMERA_CAPTURE);
                     startCameraIntent();
                 } catch (Exception e) {
                     Toast toast = Toast
@@ -182,6 +201,8 @@ public class MainActivity extends AppCompatActivity {
                         } catch (Exception e) {
                             Bitmap thumbnailBitmap = (Bitmap) data.getExtras().get("data");
                             ico.setImageBitmap(thumbnailBitmap);
+                            ico_box.setImageBitmap(thumbnailBitmap);
+                            ico_big.setImageBitmap(thumbnailBitmap);
                         }
                     }
                 }
@@ -192,8 +213,12 @@ public class MainActivity extends AppCompatActivity {
                         Bitmap bitmap = getDecodeBitmap(picUri);
                         if (bitmap != null) {
                             ico.setImageBitmap(bitmap);
+                            ico_box.setImageBitmap(bitmap);
+                            ico_big.setImageBitmap(bitmap);
                         } else {
                             ico.setImageResource(R.drawable.user);
+                            ico_box.setImageResource(R.drawable.user);
+                            ico_big.setImageResource(R.drawable.user);
                         }
                     }
                 }
@@ -212,13 +237,26 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 // передаём его в ImageView
-                if (bitmap != null) {
-                    ico.setImageBitmap(bitmap);
+                if (!cropBig) {
+                    if (bitmap != null) {
+                        ico.setImageBitmap(bitmap);
+                        ico_box.setImageBitmap(bitmap);
+                    } else {
+                        ico.setImageResource(R.drawable.user);
+                        ico_box.setImageResource(R.drawable.user);
+                    }
+                    ico_big.setImageResource(R.drawable.user);
+                    cropBig = true;
+                    performCropBig();
                 } else {
-                    ico.setImageResource(R.drawable.user);
-                }
-                if (photoFile != null) {
-                    photoFile.delete();
+                    if (bitmap != null) {
+                        ico_big.setImageBitmap(bitmap);
+                    } else {
+                        ico_big.setImageResource(R.drawable.user);
+                    }
+                    if (photoFile != null) {
+                        photoFile.delete();
+                    }
                 }
             } else if (requestCode == GALLERY_REQUEST) {
                 Bitmap bitmap = null;
@@ -233,8 +271,7 @@ public class MainActivity extends AppCompatActivity {
                             return;
                         } else {
                             picUri = Uri.parse(realPath);
-                            Uri inUri = picUri;
-                            File in = new File(inUri.getPath());
+                            File in = new File(picUri.getPath());
                             try {
                                 File out = createImageFile();
                                 copy(in, out);
@@ -245,13 +282,60 @@ public class MainActivity extends AppCompatActivity {
                                     bitmap = getDecodeBitmap(picUri);
                                     if (bitmap != null) {
                                         ico.setImageBitmap(bitmap);
+                                        ico_box.setImageBitmap(bitmap);
+                                        ico_big.setImageBitmap(bitmap);
                                     } else {
                                         ico.setImageResource(R.drawable.user);
+                                        ico_box.setImageResource(R.drawable.user);
+                                        ico_big.setImageResource(R.drawable.user);
                                     }
                                 }
                             } catch (Exception e) {
                                 e.printStackTrace();
-                                ico.setImageResource(R.drawable.user);
+                                picUri = Uri.parse(realPath);
+                                try {
+                                    bitmap = MediaStore.Images.Media.getBitmap(getContentResolver(), picUri);
+                                } catch (IOException ex) {
+                                    ex.printStackTrace();
+                                }
+                                if (bitmap != null) {
+                                    try {
+                                        File out = createImageFile();
+                                        FileOutputStream fileOutputStream = new FileOutputStream(out);
+                                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, fileOutputStream);
+                                        fileOutputStream.flush();
+                                        fileOutputStream.close();
+                                        // кадрируем его
+                                        try {
+                                            performCrop();
+                                        } catch(ActivityNotFoundException anfe){
+                                            if (bitmap != null) {
+                                                ico.setImageBitmap(bitmap);
+                                                ico_box.setImageBitmap(bitmap);
+                                                ico_big.setImageBitmap(bitmap);
+                                            } else {
+                                                ico.setImageResource(R.drawable.user);
+                                                ico_box.setImageResource(R.drawable.user);
+                                                ico_big.setImageResource(R.drawable.user);
+                                            }
+                                        }
+                                    } catch (Exception exe) {
+                                        exe.printStackTrace();
+                                        if (bitmap != null) {
+                                            ico.setImageBitmap(bitmap);
+                                            ico_box.setImageBitmap(bitmap);
+                                            ico_big.setImageBitmap(bitmap);
+                                        } else {
+                                            ico.setImageResource(R.drawable.user);
+                                            ico_box.setImageResource(R.drawable.user);
+                                            ico_big.setImageResource(R.drawable.user);
+                                        }
+                                    }
+                                } else {
+                                    ico.setImageResource(R.drawable.user);
+                                    ico_box.setImageResource(R.drawable.user);
+                                    ico_big.setImageResource(R.drawable.user);
+                                }
                             }
                         }
                     } else {
@@ -262,8 +346,12 @@ public class MainActivity extends AppCompatActivity {
                         }
                         if (bitmap != null) {
                             ico.setImageBitmap(bitmap);
+                            ico_box.setImageBitmap(bitmap);
+                            ico_big.setImageBitmap(bitmap);
                         } else {
                             ico.setImageResource(R.drawable.user);
+                            ico_box.setImageResource(R.drawable.user);
+                            ico_big.setImageResource(R.drawable.user);
                         }
                     }
                 }
@@ -334,8 +422,12 @@ public class MainActivity extends AppCompatActivity {
                     Bitmap bitmap = getDecodeBitmap(picUri);
                     if (bitmap != null) {
                         ico.setImageBitmap(bitmap);
+                        ico_box.setImageBitmap(bitmap);
+                        ico_big.setImageBitmap(bitmap);
                     } else {
                         ico.setImageResource(R.drawable.user);
+                        ico_box.setImageResource(R.drawable.user);
+                        ico_big.setImageResource(R.drawable.user);
                     }
                 }
             }
@@ -433,8 +525,21 @@ public class MainActivity extends AppCompatActivity {
         cropIntent.putExtra("crop", "true");
         cropIntent.putExtra("aspectX", 1);
         cropIntent.putExtra("aspectY", 1);
-        cropIntent.putExtra("outputX", 256);
-        cropIntent.putExtra("outputY", 256);
+        cropIntent.putExtra("outputX", 512);
+        cropIntent.putExtra("outputY", 512);
+        cropIntent.putExtra("return-data", true);
+        startActivityForResult(cropIntent, PIC_CROP);
+    }
+
+    private void performCropBig(){
+        // Намерение для кадрирования. Не все устройства поддерживают его
+        Intent cropIntent = new Intent("com.android.camera.action.CROP");
+        cropIntent.setDataAndType(picUri, "image/*");
+        cropIntent.putExtra("crop", "true");
+        cropIntent.putExtra("aspectX", 1);
+        cropIntent.putExtra("aspectY", 2);
+        cropIntent.putExtra("outputX", 512);
+        cropIntent.putExtra("outputY", 1024);
         cropIntent.putExtra("return-data", true);
         startActivityForResult(cropIntent, PIC_CROP);
     }
